@@ -1,0 +1,46 @@
+name: Windows RDP Ngrok
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Prepare Environment & Enable RDP
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        net user runneradmin SecurityPass123! /add
+        net localgroup administrators runneradmin /add
+
+    - name: Download & Extract Ngrok
+      run: |
+        Invoke-WebRequest https://bin.equinox.io/c/bTsR2533MvE/ngrok-v3-stable-windows-amd64.zip -OutFile ngrok.zip
+        Expand-Archive ngrok.zip -DestinationPath .
+
+    - name: Authenticate & Start Ngrok Tunnel
+      run: |
+        .\ngrok.exe config add-authtoken ${{ secrets.NGROK_AUTH_TOKEN }}
+        Start-Process .\ngrok.exe -ArgumentList "tcp 3389"
+        Start-Sleep -Seconds 5
+        try {
+          $response = Invoke-RestMethod -Uri http://127.0.0.1:4040/api/tunnels
+          $rdp_url = $response.tunnels[0].public_url
+          Write-Host "=========================================="
+          Write-Host "RDP Address : $rdp_url"
+          Write-Host "Username    : runneradmin"
+          Write-Host "Password    : SecurityPass123!"
+          Write-Host "=========================================="
+        } catch {
+          Write-Host "Gagal mengambil URL Ngrok. Pastikan NGROK_AUTH_TOKEN valid."
+        }
+
+    - name: Keep Alive Workflow
+      run: |
+        $i = 0
+        while ($i -lt 360) {
+          Start-Sleep -Seconds 60
+          $i++
+          Write-Host "VPS Aktif... ($i / 360 menit)"
+        }
