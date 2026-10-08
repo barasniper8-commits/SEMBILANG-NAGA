@@ -1,7 +1,12 @@
-name: Windows VPS RDP (Serveo)
+name: Windows VPS RDP (Ngrok)
 
 on:
   workflow_dispatch:
+    inputs:
+      ngrok_token:
+        description: 'Masukkan Auth Token Ngrok Kamu'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -19,29 +24,30 @@ jobs:
           $Password = ConvertTo-SecureString "Admin123456!" -AsPlainText -Force
           Set-LocalUser -Name "runneradmin" -Password $Password
 
-      - name: Start Serveo Tunnel (Auto Reconnect)
+      - name: Setup and Start Ngrok
         run: |
+          choco install ngrok
+          ngrok config add-authtoken "${{ github.event.inputs.ngrok_token }}"
+          Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389" -WindowStyle Hidden
+          Start-Sleep -Seconds 6
+
           try {
-            $runnerIp = (Invoke-RestMethod -Uri "https://api.ipify.org")
+            $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
+            $url = $response.tunnels[0].public_url -replace "tcp://", ""
+            Write-Host "=========================================="
+            Write-Host " Address RDP : $url"
+            Write-Host " Username    : runneradmin"
+            Write-Host " Password    : Admin123456!"
+            Write-Host "=========================================="
           } catch {
-            $runnerIp = "Gagal mengambil IP"
+            Write-Host "Gagal mengambil URL Ngrok. Pastikan Auth Token kamu benar."
           }
 
-          Write-Host "=========================================="
-          Write-Host " IP Publik Runner : $runnerIp"
-          Write-Host " Username         : runneradmin"
-          Write-Host " Password         : Admin123456!"
-          Write-Host "=========================================="
-
-          # Perulangan otomatis jika Serveo terputus karena idle
+      - name: Keep VPS Active
+        run: |
+          $cnt = 0
           while ($true) {
-            Write-Host "------------------------------------------"
-            Write-Host " Membuka koneksi Serveo..."
-            Write-Host " Silakan lihat baris 'Forwarding TCP connections from' di bawah:"
-            Write-Host "------------------------------------------"
-            
-            ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -R 0:localhost:3389 serveo.net
-            
-            Write-Host "Koneksi Serveo terputus. Mengubungkan ulang dalam 3 detik..."
-            Start-Sleep -Seconds 3
+            Start-Sleep -Seconds 60
+            $cnt++
+            Write-Host "VPS Active - $cnt min"
           }
