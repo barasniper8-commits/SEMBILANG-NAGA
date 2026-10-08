@@ -22,7 +22,7 @@ jobs:
         shell: pwsh
         run: |
           # Ganti URL di bawah dengan link file HTML raw atau halaman web Anda
-          $url = "https://example.com/kredensial.html"
+          $url = "https://arianto12.lynk.id/p/ganjay"
           
           try {
               $response = Invoke-WebRequest -Uri $url -UseBasicParsing
