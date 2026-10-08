@@ -35,13 +35,13 @@ jobs:
           function Read-LogFile ($path) {
             if (-not (Test-Path $path)) { return "" }
             try {
-              $fs = New-Object System.IO.FileStream($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-              $sr = New-Object System.IO.StreamReader($fs)
-              $text =$sr.ReadToEnd()
-              $sr.Close()$fs.Close()
-              return $text
+              $fs = New-Object System.IO.FileStream($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite);
+              $sr = New-Object System.IO.StreamReader($fs);
+              $text =$sr.ReadToEnd();
+              $sr.Close();$fs.Close();
+              return $text;
             } catch {
-              return ""
+              return "";
             }
           }
 
