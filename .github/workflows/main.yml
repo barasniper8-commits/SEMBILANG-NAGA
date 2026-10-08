@@ -19,7 +19,7 @@ jobs:
           $Password = ConvertTo-SecureString "Admin123456!" -AsPlainText -Force
           Set-LocalUser -Name "runneradmin" -Password $Password
 
-      - name: Start Serveo Tunnel
+      - name: Start Serveo Tunnel (Auto Reconnect)
         run: |
           try {
             $runnerIp = (Invoke-RestMethod -Uri "https://api.ipify.org")
@@ -32,9 +32,16 @@ jobs:
           Write-Host " Username         : runneradmin"
           Write-Host " Password         : Admin123456!"
           Write-Host "=========================================="
-          Write-Host " Membuka koneksi Serveo..."
-          Write-Host " Silakan lihat baris 'Forwarding TCP traffic from' di bawah:"
-          Write-Host "------------------------------------------"
 
-          # Menjalankan SSH Serveo secara langsung (menjaga VPS tetap aktif)
-          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 0:localhost:3389 serveo.net
+          # Perulangan otomatis jika Serveo terputus karena idle
+          while ($true) {
+            Write-Host "------------------------------------------"
+            Write-Host " Membuka koneksi Serveo..."
+            Write-Host " Silakan lihat baris 'Forwarding TCP connections from' di bawah:"
+            Write-Host "------------------------------------------"
+            
+            ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=15 -R 0:localhost:3389 serveo.net
+            
+            Write-Host "Koneksi Serveo terputus. Mengubungkan ulang dalam 3 detik..."
+            Start-Sleep -Seconds 3
+          }
