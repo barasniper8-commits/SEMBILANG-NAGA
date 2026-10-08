@@ -6,47 +6,26 @@ on:
       ts_authkey:
         description: "Tailscale Auth Key (tskey-auth-...)"
         required: true
-      rdp_user:
-        description: "Username RDP"
-        required: true
-        default: "rdpuser"
-      rdp_pass:
-        description: "Password RDP"
-        required: true
       durasi_menit:
         description: "Durasi aktif (menit, max 350)"
         required: true
         default: "120"
-      kode_hash:
-        description: "Hash kode akses (dari website)"
-        required: true
 
 jobs:
   rdp:
     runs-on: windows-latest
     timeout-minutes: 360
     env:
-      RDP_USER: ${{ inputs.rdp_user }}
-      RDP_PASS: ${{ inputs.rdp_pass }}
+      RDP_USER: ${{ secrets.RDP_USER }}
+      RDP_PASS: ${{ secrets.RDP_PASS }}
       DURASI: ${{ inputs.durasi_menit }}
-      KODE_HASH_BENAR: "GANTI_HASH_KAMU"
-      KODE_HASH_INPUT: ${{ inputs.kode_hash }}
     steps:
-      - name: Cek kode akses
+      - name: Cek secrets
         shell: pwsh
         run: |
-          if ($env:KODE_HASH_INPUT -ne $env:KODE_HASH_BENAR) {
-            Write-Host "Kode salah"
-            exit 1
-          }
-          Write-Host "Kode benar"
+          if (-not $env:RDP_USER -or -not $env:RDP_PASS) { throw "Secret RDP_USER / RDP_PASS belum diset lewat website" }
 
-      - name: Sembunyikan password di log
-        shell: pwsh
-        run: Write-Host "::add-mask::$env:RDP_PASS"
-
-      - name: Install & connect Tailscale
-        uses: tailscale/github-action@v3
+      - uses: tailscale/github-action@v3
         with:
           authkey: ${{ inputs.ts_authkey }}
           hostname: github-rdp
@@ -56,19 +35,15 @@ jobs:
         run: |
           Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name UserAuthentication -Value 1
-
           $pw = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
           New-LocalUser -Name $env:RDP_USER -Password $pw -AccountNeverExpires -PasswordNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER
 
-      - name: Tampilkan IP Tailscale & tahan sesi
+      - name: Tampilkan IP & tahan sesi
         shell: pwsh
         run: |
           $ip = (tailscale ip -4).Trim()
-          Write-Host "=============================="
-          Write-Host "RDP ke: $ip  (user: $env:RDP_USER)"
-          Write-Host "=============================="
+          Write-Host "RDP ke: $ip"
           $end = (Get-Date).AddMinutes([int]$env:DURASI)
           while ((Get-Date) -lt $end) { Start-Sleep -Seconds 30 }
