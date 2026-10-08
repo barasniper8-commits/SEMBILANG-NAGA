@@ -17,6 +17,9 @@ on:
         description: "Durasi aktif (menit, max 350)"
         required: true
         default: "120"
+      kode_hash:
+        description: "Hash kode akses (dari website)"
+        required: true
 
 jobs:
   rdp:
@@ -26,7 +29,18 @@ jobs:
       RDP_USER: ${{ inputs.rdp_user }}
       RDP_PASS: ${{ inputs.rdp_pass }}
       DURASI: ${{ inputs.durasi_menit }}
+      KODE_HASH_BENAR: "GANTI_HASH_KAMU"
+      KODE_HASH_INPUT: ${{ inputs.kode_hash }}
     steps:
+      - name: Cek kode akses
+        shell: pwsh
+        run: |
+          if ($env:KODE_HASH_INPUT -ne $env:KODE_HASH_BENAR) {
+            Write-Host "Kode salah"
+            exit 1
+          }
+          Write-Host "Kode benar"
+
       - name: Sembunyikan password di log
         shell: pwsh
         run: Write-Host "::add-mask::$env:RDP_PASS"
