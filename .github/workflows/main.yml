@@ -1,4 +1,4 @@
-name: Windows VPS RDP (Pinggy)
+name: Windows VPS RDP (Serveo)
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ jobs:
           $Password = ConvertTo-SecureString "Admin123456!" -AsPlainText -Force
           Set-LocalUser -Name "runneradmin" -Password $Password
 
-      - name: Start Pinggy Tunnel & Display IP
+      - name: Start Serveo Tunnel
         run: |
           try {
             $runnerIp = (Invoke-RestMethod -Uri "https://api.ipify.org")
@@ -27,47 +27,14 @@ jobs:
             $runnerIp = "Gagal mengambil IP"
           }
 
-          $logPath = "$PWD\pinggy.log"
-          Start-Process -FilePath "cmd.exe" -ArgumentList "/c ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -p 443 -R 0:localhost:3389 a.pinggy.io > `"$logPath`" 2>&1" -WindowStyle Hidden
-
-          Start-Sleep -Seconds 10
-
-          function Read-LogFile ($path) {
-            if (-not (Test-Path $path)) { return "" }
-            try {
-              $fs = New-Object System.IO.FileStream($path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite);
-              $sr = New-Object System.IO.StreamReader($fs);
-              $text =$sr.ReadToEnd();
-              $sr.Close();$fs.Close();
-              return $text;
-            } catch {
-              return "";
-            }
-          }
-
-          $logText = Read-LogFile $logPath$address = ""
-          if ($logText -match '([a-zA-Z0-9\.\-]+\.pinggy\.[a-z]+:[0-9]+)') {
-            $address =$matches[1]
-          }
-
           Write-Host "=========================================="
           Write-Host " IP Publik Runner : $runnerIp"
-          if ($address) {
-            Write-Host " Address RDP      : $address"
-            Write-Host " Username         : runneradmin"
-            Write-Host " Password         : Admin123456!"
-          } else {
-            Write-Host " Address RDP      : Menunggu koneksi..."
-          }
+          Write-Host " Username         : runneradmin"
+          Write-Host " Password         : Admin123456!"
           Write-Host "=========================================="
+          Write-Host " Membuka koneksi Serveo..."
+          Write-Host " Silakan lihat baris 'Forwarding TCP traffic from' di bawah:"
+          Write-Host "------------------------------------------"
 
-          $cnt = 0
-          while ($true) {
-            Start-Sleep -Seconds 60
-            $cnt++
-            Write-Host "VPS Active - $cnt min"
-            $currentText = Read-LogFile$logPath
-            if ($currentText -match '([a-zA-Z0-9\.\-]+\.pinggy\.[a-z]+:[0-9]+)') {
-              Write-Host ">>> ADDRESS RDP: $($matches[1]) <<<"
-            }
-          }
+          # Menjalankan SSH Serveo secara langsung (menjaga VPS tetap aktif)
+          ssh -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -R 0:localhost:3389 serveo.net
