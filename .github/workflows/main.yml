@@ -1,49 +1,88 @@
-name: RDP Tailscale
+name: Windows RDP Tailscale
 
 on:
   workflow_dispatch:
     inputs:
-      ts_authkey:
-        description: "Tailscale Auth Key (tskey-auth-...)"
+      tailscale_authkey:
+        description: 'Masukkan Tailscale Authkey (tskey-auth-...)'
         required: true
-      durasi_menit:
-        description: "Durasi aktif (menit, max 350)"
-        required: true
-        default: "120"
+        type: string
 
 jobs:
-  rdp:
+  build:
     runs-on: windows-latest
     timeout-minutes: 360
-    env:
-      RDP_USER: ${{ secrets.RDP_USER }}
-      RDP_PASS: ${{ secrets.RDP_PASS }}
-      DURASI: ${{ inputs.durasi_menit }}
+
     steps:
-      - name: Cek secrets
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Mengambil Kredensial dari Web HTML
+        id: get_creds
         shell: pwsh
         run: |
-          if (-not $env:RDP_USER -or -not $env:RDP_PASS) { throw "Secret RDP_USER / RDP_PASS belum diset lewat website" }
+          # Ganti URL di bawah dengan link file HTML raw atau halaman web Anda
+          $url = "https://example.com/kredensial.html"
+          
+          try {
+              $response = Invoke-WebRequest -Uri $url -UseBasicParsing
+              # Asumsi di halaman HTML Anda ada teks berformat: USER:namapengguna PASS:katasandi
+              # Atau Anda bisa menyesuaikan regex parsing di bawah sesuai struktur HTML Anda
+              if ($response.Content -match 'USER:(?<user>\S+)\s+PASS:(?<pass>\S+)') {
+                  $username = $matches['user']
+                  $password = $matches['pass']
+              } else {
+                  # Fallback default jika parsing gagal
+                  $username = "AdminRDP"
+                  $password = "PasswordAman123!"
+              }
+          } catch {
+              $username = "AdminRDP"
+              $password = "PasswordAman123!"
+          }
 
-      - uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ inputs.ts_authkey }}
-          hostname: github-rdp
+          echo "USERNAME=$username" >> $env:GITHUB_OUTPUT
+          echo "::add-mask::$password"
 
-      - name: Aktifkan RDP & buat user
+          # Membuat user baru atau mengubah password Administrator
+          net user $username $password /add
+          net localgroup administrators $username /add
+          
+          Write-Host "RDP User berhasil diset: $username"
+
+      - name: Mengaktifkan RDP (Remote Desktop)
         shell: pwsh
         run: |
-          Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          $pw = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
-          New-LocalUser -Name $env:RDP_USER -Password $pw -AccountNeverExpires -PasswordNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-      - name: Tampilkan IP & tahan sesi
+      - name: Instal & Konfigurasi Tailscale
         shell: pwsh
         run: |
-          $ip = (tailscale ip -4).Trim()
-          Write-Host "RDP ke: $ip"
-          $end = (Get-Date).AddMinutes([int]$env:DURASI)
-          while ((Get-Date) -lt $end) { Start-Sleep -Seconds 30 }
+          winget install Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements
+          Start-Sleep -s 5
+          
+          # Join ke network Tailscale menggunakan authkey dari input
+          & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="${{ github.event.inputs.tailscale_authkey }}" --unattended
+          
+          Write-Host "Tailscale berhasil terhubung!"
+
+      - name: Informasi Akses RDP
+        shell: pwsh
+        run: |
+          $ip = (Test-Connection -ComputerName (hostname) -Count 1).IPV4Address.IPAddressToString
+          $tsIp = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
+          
+          Write-Host "=================================================="
+          Write-Host "RDP Siap Digunakan!"
+          Write-Host "IP Lokal/Public GitHub: $ip"
+          Write-Host "IP Tailscale (Gunakan ini di Windows App): $tsIp"
+          Write-Host "Username: ${{ steps.get_creds.outputs.USERNAME }}"
+          Write-Host "=================================================="
+
+      - name: Menjaga RDP Tetap Hidup
+        shell: pwsh
+        run: |
+          Write-Host "RDP sedang berjalan. Biarkan tab ini terbuka."
+          while ($true) { Start-Sleep -s 30 }
