@@ -17,34 +17,32 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Mengambil Kredensial dari Web HTML
+      - name: Mengambil Kredensial dari Lynk.id
         id: get_creds
         shell: pwsh
         run: |
-          # Ganti URL di bawah dengan link file HTML raw atau halaman web Anda
           $url = "https://arianto12.lynk.id/p/ganjay"
           
           try {
               $response = Invoke-WebRequest -Uri $url -UseBasicParsing
-              # Asumsi di halaman HTML Anda ada teks berformat: USER:namapengguna PASS:katasandi
-              # Atau Anda bisa menyesuaikan regex parsing di bawah sesuai struktur HTML Anda
+              # Mengambil teks dari halaman, sesuaikan pola regex jika diperlukan
               if ($response.Content -match 'USER:(?<user>\S+)\s+PASS:(?<pass>\S+)') {
                   $username = $matches['user']
                   $password = $matches['pass']
               } else {
-                  # Fallback default jika parsing gagal
-                  $username = "AdminRDP"
-                  $password = "PasswordAman123!"
+                  # Fallback jika format tidak ditemukan di halaman
+                  $username = "AriantoRDP"
+                  $password = "GanjayRDP2026!"
               }
           } catch {
-              $username = "AdminRDP"
-              $password = "PasswordAman123!"
+              $username = "AriantoRDP"
+              $password = "GanjayRDP2026!"
           }
 
           echo "USERNAME=$username" >> $env:GITHUB_OUTPUT
           echo "::add-mask::$password"
 
-          # Membuat user baru atau mengubah password Administrator
+          # Membuat user baru dan memasukkannya ke grup Administrator
           net user $username $password /add
           net localgroup administrators $username /add
           
@@ -63,7 +61,7 @@ jobs:
           winget install Tailscale.Tailscale --silent --accept-package-agreements --accept-source-agreements
           Start-Sleep -s 5
           
-          # Join ke network Tailscale menggunakan authkey dari input
+          # Join ke network Tailscale menggunakan authkey dari input manual saat run workflow
           & "C:\Program Files\Tailscale\tailscale.exe" up --authkey="${{ github.event.inputs.tailscale_authkey }}" --unattended
           
           Write-Host "Tailscale berhasil terhubung!"
@@ -76,7 +74,6 @@ jobs:
           
           Write-Host "=================================================="
           Write-Host "RDP Siap Digunakan!"
-          Write-Host "IP Lokal/Public GitHub: $ip"
           Write-Host "IP Tailscale (Gunakan ini di Windows App): $tsIp"
           Write-Host "Username: ${{ steps.get_creds.outputs.USERNAME }}"
           Write-Host "=================================================="
