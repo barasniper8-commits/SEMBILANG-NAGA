@@ -28,8 +28,10 @@ jobs:
         run: |
           choco install ngrok
           ngrok config add-authtoken "${{ github.event.inputs.ngrok_token }}"
-          Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389" -WindowStyle Hidden
-          Start-Sleep -Seconds 6
+          
+          # Simpan log error ke file
+          Start-Process -FilePath "cmd.exe" -ArgumentList "/c ngrok tcp 3389 > ngrok.log 2>&1" -WindowStyle Hidden
+          Start-Sleep -Seconds 10
 
           try {
             $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
@@ -40,7 +42,8 @@ jobs:
             Write-Host " Password    : Admin123456!"
             Write-Host "=========================================="
           } catch {
-            Write-Host "Gagal mengambil URL Ngrok. Pastikan Auth Token kamu benar."
+            Write-Host "=== NGROK GAGAL BERJALAN ==="
+            if (Test-Path "ngrok.log") { Get-Content "ngrok.log" }
           }
 
       - name: Keep VPS Active
