@@ -43,18 +43,19 @@ jobs:
 
           Write-Host ""
           Write-Host "============================================================"
-          Write-Host "        🚀 ARIANTO WINDOWS VPS"
+          Write-Host "          🚀 ARIANTO WINDOWS VPS STARTING"
           Write-Host "============================================================"
           Write-Host ""
-          Write-Host "⚡ Starting Windows Cloud Environment..."
-          Write-Host "⚡ Preparing RDP..."
-          Write-Host "⚡ Preparing Tailscale..."
-          Write-Host ""
+
+          Write-Host "⚡ Windows Runner : STARTING"
+          Write-Host "⚡ RDP            : PREPARING"
+          Write-Host "⚡ Tailscale      : PREPARING"
 
           Start-Sleep -Seconds 2
 
+
       # ==========================================================
-      # SYSTEM INFO
+      # SYSTEM
       # ==========================================================
 
       - name: 🧠 SYSTEM INFORMATION
@@ -66,15 +67,20 @@ jobs:
           Write-Host "                  🧠 SYSTEM INFORMATION"
           Write-Host "============================================================"
 
-          Write-Host ""
-          Write-Host "Computer : $env:COMPUTERNAME"
-          Write-Host "OS       : $((Get-CimInstance Win32_OperatingSystem).Caption)"
-          Write-Host "Build    : $((Get-CimInstance Win32_OperatingSystem).BuildNumber)"
-          Write-Host "CPU      : $((Get-CimInstance Win32_Processor).Name)"
-          Write-Host "RAM      : $([math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB,2)) GB"
+          $os = Get-CimInstance Win32_OperatingSystem
+          $cpu = Get-CimInstance Win32_Processor
+          $ram = Get-CimInstance Win32_ComputerSystem
 
           Write-Host ""
-          Write-Host "✅ System detected"
+          Write-Host "Computer : $env:COMPUTERNAME"
+          Write-Host "OS       : $($os.Caption)"
+          Write-Host "Build    : $($os.BuildNumber)"
+          Write-Host "CPU      : $($cpu.Name)"
+          Write-Host "RAM      : $([math]::Round($ram.TotalPhysicalMemory / 1GB,2)) GB"
+
+          Write-Host ""
+          Write-Host "✅ SYSTEM READY"
+
 
       # ==========================================================
       # ENABLE RDP
@@ -82,30 +88,166 @@ jobs:
 
       - name: 🖥️ ENABLE WINDOWS RDP
         shell: powershell
+        continue-on-error: false
         run: |
 
           Write-Host ""
           Write-Host "============================================================"
-          Write-Host "                 🖥️ ENABLE WINDOWS RDP"
+          Write-Host "              🖥️ ENABLE WINDOWS RDP"
           Write-Host "============================================================"
+          Write-Host ""
+
+          Write-Host "🔧 Configuring Remote Desktop..."
+
+          # ------------------------------------------------------
+          # Enable RDP
+          # ------------------------------------------------------
+
+          try {
+
+              Set-ItemProperty `
+                -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" `
+                -Name "fDenyTSConnections" `
+                -Type DWord `
+                -Value 0 `
+                -ErrorAction Stop
+
+              Write-Host "✅ RDP registry enabled"
+
+          }
+          catch {
+
+              Write-Host "❌ Failed to enable RDP registry"
+              Write-Host $_.Exception.Message
+              throw
+          }
+
+
+          # ------------------------------------------------------
+          # Enable Network Level Authentication
+          # ------------------------------------------------------
+
+          try {
+
+              Set-ItemProperty `
+                -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
+                -Name "UserAuthentication" `
+                -Type DWord `
+                -Value 1 `
+                -ErrorAction Stop
+
+              Write-Host "✅ NLA configured"
+
+          }
+          catch {
+
+              Write-Host "⚠️ NLA configuration failed"
+              Write-Host $_.Exception.Message
+
+          }
+
+
+          # ------------------------------------------------------
+          # Start RDP Service
+          # ------------------------------------------------------
+
+          try {
+
+              $service = Get-Service -Name TermService -ErrorAction Stop
+
+              Write-Host ""
+              Write-Host "RDP Service status: $($service.Status)"
+
+              if ($service.Status -ne "Running") {
+
+                  Write-Host "🔄 Starting Remote Desktop Service..."
+
+                  Start-Service -Name TermService -ErrorAction Stop
+
+                  Start-Sleep -Seconds 3
+              }
+
+              Write-Host "✅ Remote Desktop Service running"
+
+          }
+          catch {
+
+              Write-Host "❌ RDP Service error"
+              Write-Host $_.Exception.Message
+              throw
+          }
+
+
+          # ------------------------------------------------------
+          # Firewall
+          # ------------------------------------------------------
 
           Write-Host ""
-          Write-Host "🔧 Enabling Remote Desktop..."
+          Write-Host "🔥 Configuring Windows Firewall..."
 
-          Set-ItemProperty `
-            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" `
-            -Name "fDenyTSConnections" `
-            -Value 0
+          try {
 
-          Set-ItemProperty `
-            -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" `
-            -Name "UserAuthentication" `
-            -Value 1
+              $rules = Get-NetFirewallRule `
+                -DisplayGroup "Remote Desktop" `
+                -ErrorAction SilentlyContinue
 
-          Enable-NetFirewallRule `
-            -DisplayGroup "Remote Desktop"
+              if ($rules) {
 
-          Write-Host "✅ RDP enabled"
+                  $rules | Enable-NetFirewallRule -ErrorAction SilentlyContinue
+
+                  Write-Host "✅ Remote Desktop firewall rules enabled"
+
+              }
+              else {
+
+                  Write-Host "⚠️ Default RDP firewall group not found"
+                  Write-Host "🔧 Creating RDP firewall rule..."
+
+                  New-NetFirewallRule `
+                    -DisplayName "ARIANTO RDP 3389" `
+                    -Direction Inbound `
+                    -Protocol TCP `
+                    -LocalPort 3389 `
+                    -Action Allow `
+                    -Profile Any `
+                    -ErrorAction SilentlyContinue
+
+                  Write-Host "✅ Custom RDP firewall rule created"
+              }
+
+          }
+          catch {
+
+              Write-Host "⚠️ Firewall configuration warning"
+              Write-Host $_.Exception.Message
+          }
+
+
+          # ------------------------------------------------------
+          # Verify RDP Registry
+          # ------------------------------------------------------
+
+          $rdp = Get-ItemProperty `
+            -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
+
+          Write-Host ""
+          Write-Host "RDP Registry fDenyTSConnections = $($rdp.fDenyTSConnections)"
+
+          if ($rdp.fDenyTSConnections -eq 0) {
+
+              Write-Host ""
+              Write-Host "============================================================"
+              Write-Host "             ✅ WINDOWS RDP ENABLED"
+              Write-Host "============================================================"
+
+          }
+          else {
+
+              Write-Host ""
+              Write-Host "❌ RDP IS STILL DISABLED"
+              throw "Unable to enable Windows Remote Desktop"
+          }
+
 
       # ==========================================================
       # CREATE USER
@@ -113,6 +255,7 @@ jobs:
 
       - name: 👤 CREATE RDP USER
         shell: powershell
+
         env:
           RDP_USER: ${{ inputs.rdp_user }}
           RDP_PASSWORD: ${{ inputs.rdp_password }}
@@ -128,8 +271,8 @@ jobs:
           $password = $env:RDP_PASSWORD
 
           Write-Host ""
-          Write-Host "👤 Username : $username"
-          Write-Host "🔑 Password : ********"
+          Write-Host "Username : $username"
+          Write-Host "Password : ********"
           Write-Host ""
 
           $securePassword = ConvertTo-SecureString `
@@ -137,31 +280,32 @@ jobs:
             -AsPlainText `
             -Force
 
-          $existing = Get-LocalUser `
+          $user = Get-LocalUser `
             -Name $username `
             -ErrorAction SilentlyContinue
 
-          if ($existing) {
+          if ($null -eq $user) {
 
-              Write-Host "♻️ User already exists"
+              Write-Host "➕ Creating Windows user..."
+
+              New-LocalUser `
+                -Name $username `
+                -Password $securePassword `
+                -FullName $username `
+                -Description "Arianto GitHub VPS"
+
+          }
+          else {
+
+              Write-Host "♻️ User exists"
               Write-Host "🔄 Updating password..."
 
               Set-LocalUser `
                 -Name $username `
                 -Password $securePassword
-
           }
-          else {
 
-              Write-Host "➕ Creating new Windows user..."
-
-              New-LocalUser `
-                -Name $username `
-                -Password $securePassword `
-                -FullName "Arianto VPS User" `
-                -Description "GitHub Windows VPS"
-
-          }
+          Write-Host "👤 Adding user to Remote Desktop Users..."
 
           Add-LocalGroupMember `
             -Group "Remote Desktop Users" `
@@ -169,10 +313,11 @@ jobs:
             -ErrorAction SilentlyContinue
 
           Write-Host ""
-          Write-Host "✅ RDP user ready"
+          Write-Host "✅ USER READY"
+
 
       # ==========================================================
-      # DOWNLOAD TAILSCALE
+      # INSTALL TAILSCALE
       # ==========================================================
 
       - name: 📦 INSTALL TAILSCALE
@@ -198,14 +343,21 @@ jobs:
           Write-Host "✅ Download complete"
 
           Write-Host ""
-          Write-Host "⚙️ Installing Tailscale..."
+          Write-Host "⚙️ Installing..."
 
           Start-Process `
             msiexec.exe `
             -ArgumentList "/i `"$installer`" /qn /norestart" `
             -Wait
 
+          if (!(Test-Path "C:\Program Files\Tailscale\tailscale.exe")) {
+
+              Write-Host "❌ Tailscale installation failed"
+              exit 1
+          }
+
           Write-Host "✅ Tailscale installed"
+
 
       # ==========================================================
       # CONNECT TAILSCALE
@@ -225,24 +377,24 @@ jobs:
           Write-Host "============================================================"
 
           Write-Host ""
-          Write-Host "🔐 Connecting Windows VPS to Tailscale..."
+          Write-Host "🔐 Connecting..."
 
           & "C:\Program Files\Tailscale\tailscale.exe" up `
             --authkey="$env:TS_AUTHKEY" `
-            --hostname="arianto-github-vps-$env:GITHUB_RUN_ID"
+            --hostname="arianto-github-$env:GITHUB_RUN_ID"
 
           if ($LASTEXITCODE -ne 0) {
 
               Write-Host ""
               Write-Host "❌ Tailscale connection failed"
-
               exit 1
           }
 
           Start-Sleep -Seconds 5
 
           Write-Host ""
-          Write-Host "✅ Tailscale connected"
+          Write-Host "✅ TAILSCALE CONNECTED"
+
 
       # ==========================================================
       # GET IP
@@ -254,52 +406,63 @@ jobs:
 
           Write-Host ""
           Write-Host "============================================================"
-          Write-Host "                    🌐 NETWORK"
+          Write-Host "                    🌐 TAILSCALE NETWORK"
           Write-Host "============================================================"
 
           $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
 
           Write-Host ""
-          Write-Host "🌐 TAILSCALE IP"
+          Write-Host "🌐 TAILSCALE IP:"
           Write-Host ""
-          Write-Host "       $ip"
+          Write-Host "        $ip"
           Write-Host ""
 
-          Write-Host "🔗 Tailscale Status:"
+          Write-Host "📡 TAILSCALE STATUS:"
           Write-Host ""
 
           & "C:\Program Files\Tailscale\tailscale.exe" status
 
+
       # ==========================================================
-      # TEST RDP
+      # TEST PORT
       # ==========================================================
 
-      - name: 🧪 TEST RDP
+      - name: 🧪 TEST RDP PORT
         shell: powershell
         run: |
 
           Write-Host ""
           Write-Host "============================================================"
-          Write-Host "                     🧪 RDP TEST"
+          Write-Host "                    🧪 TEST RDP PORT"
           Write-Host "============================================================"
 
-          $rdp = Get-Service -Name TermService
+          Start-Sleep -Seconds 3
 
-          Write-Host ""
-          Write-Host "RDP Service : $($rdp.Status)"
+          $port = Get-NetTCPConnection `
+            -LocalPort 3389 `
+            -State Listen `
+            -ErrorAction SilentlyContinue
 
-          if ($rdp.Status -ne "Running") {
+          if ($port) {
 
-              Write-Host "⚠️ Starting RDP service..."
+              Write-Host ""
+              Write-Host "🟢 PORT 3389 = LISTENING"
+              Write-Host "🟢 RDP READY"
 
-              Start-Service TermService
+          }
+          else {
+
+              Write-Host ""
+              Write-Host "⚠️ PORT 3389 NOT DETECTED"
+              Write-Host "⚠️ Checking TermService..."
+
+              Get-Service TermService
+
           }
 
-          Write-Host ""
-          Write-Host "🔥 Windows RDP is READY"
 
       # ==========================================================
-      # FINAL INFORMATION
+      # FINAL
       # ==========================================================
 
       - name: 🎉 VPS READY
@@ -318,33 +481,34 @@ jobs:
           Write-Host "              🎉 ARIANTO WINDOWS VPS READY"
           Write-Host "============================================================"
           Write-Host ""
-          Write-Host " 🟢 STATUS       : ONLINE"
+          Write-Host "🟢 STATUS       : ONLINE"
           Write-Host ""
-          Write-Host " 🌐 TAILSCALE IP : $ip"
+          Write-Host "🌐 TAILSCALE IP : $ip"
           Write-Host ""
-          Write-Host " 👤 USERNAME     : $env:RDP_USER"
+          Write-Host "👤 USERNAME     : $env:RDP_USER"
           Write-Host ""
-          Write-Host " 🔑 PASSWORD     : ********"
+          Write-Host "🔑 PASSWORD     : ********"
           Write-Host ""
-          Write-Host " 🚪 RDP PORT     : 3389"
+          Write-Host "🚪 RDP PORT     : 3389"
           Write-Host ""
           Write-Host "============================================================"
-          Write-Host "              🖥️ WINDOWS APP CONNECTION"
+          Write-Host "                  🖥️ WINDOWS APP"
           Write-Host "============================================================"
           Write-Host ""
           Write-Host "PC NAME:"
           Write-Host "$ip"
           Write-Host ""
-          Write-Host "Username:"
+          Write-Host "USERNAME:"
           Write-Host "$env:RDP_USER"
           Write-Host ""
-          Write-Host "Password:"
-          Write-Host "Gunakan password yang kamu masukkan saat Run workflow."
+          Write-Host "PASSWORD:"
+          Write-Host "Password yang dimasukkan saat Run workflow"
           Write-Host ""
           Write-Host "============================================================"
-          Write-Host "          ⚡ VPS AKAN MATI JIKA JOB DIHENTIKAN"
+          Write-Host "          ⚡ JANGAN STOP GITHUB WORKFLOW"
           Write-Host "============================================================"
           Write-Host ""
+
 
       # ==========================================================
       # KEEP ALIVE
@@ -364,7 +528,7 @@ jobs:
 
               $ip = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
 
-              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] 🟢 VPS ONLINE | IP: $ip"
+              Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] 🟢 ONLINE | Tailscale: $ip"
 
               Start-Sleep -Seconds 60
           }
