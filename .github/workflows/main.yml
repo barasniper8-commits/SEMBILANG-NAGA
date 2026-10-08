@@ -28,7 +28,7 @@ jobs:
         run: |
           choco install ngrok -y
 
-      - name: Start Ngrok & Keep Alive
+      - name: Start Ngrok & Display IP
         run: |
           $token = "${{ github.event.inputs.ngrok_token }}"
           if (-not $token) {
@@ -42,34 +42,46 @@ jobs:
 
           ngrok config add-authtoken $token
 
-          # Jalankan Ngrok sebagai proses latar belakang yang stabil
-          Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389" -WindowStyle Hidden
+          # Jalankan Ngrok di background
+          Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389 --log=stdout" -RedirectStandardOutput "ngrok.log" -RedirectStandardError "ngrok_err.log" -WindowStyle Hidden
 
-          # Coba mengambil URL tunnel sebanyak 10 kali
-          $url = ""
+          # Dapatkan IP Publik Asli VPS Runner
+          try {
+            $runnerIp = (Invoke-RestMethod -Uri "https://api.ipify.org")
+          } catch {
+            $runnerIp = "Gagal mengambil IP Runner"
+          }
+
+          # Ambil Alamat Tunnel RDP dari API Ngrok
+          $ngrokUrl = ""
           for ($i = 1; $i -le 10; $i++) {
             Start-Sleep -Seconds 3
             try {
               $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
               if ($response.tunnels.Length -gt 0) {
-                $url = $response.tunnels[0].public_url -replace 'tcp://', ''
+                $ngrokUrl = $response.tunnels[0].public_url -replace 'tcp://', ''
                 break
               }
             } catch {}
           }
 
+          # Tampilkan Semua Informasi IP & Akses RDP di Terminal Log
           Write-Host "=========================================="
-          if ($url) {
-            Write-Host "Address  : $url"
-            Write-Host "Username : runneradmin"
-            Write-Host "Password : Admin123456!"
+          Write-Host " IP Publik Runner  : $runnerIp"
+          if ($ngrokUrl) {
+            Write-Host " Address RDP Ngrok : $ngrokUrl"
+            Write-Host " Username          : runneradmin"
+            Write-Host " Password          : Admin123456!"
           } else {
-            Write-Host "Gagal mendapatkan URL dari Ngrok."
-            Write-Host "Pastikan Auth Token benar dan email akun Ngrok sudah terverifikasi."
+            Write-Host " Address RDP Ngrok : Gagal Mengambil URL"
+            Write-Host "------------------------------------------"
+            Write-Host "LOG ERROR NGROK:"
+            if (Test-Path "ngrok.log") { Get-Content "ngrok.log" }
+            if (Test-Path "ngrok_err.log") { Get-Content "ngrok_err.log" }
           }
           Write-Host "=========================================="
 
-          # Menjaga workflow tetap aktif
+          # Menjaga Workflow Tetap Aktif
           $cnt = 0
           while ($true) {
             Start-Sleep -Seconds 60
