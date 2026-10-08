@@ -1,12 +1,7 @@
-name: Windows VPS RDP
+name: Windows VPS RDP (Pinggy)
 
 on:
   workflow_dispatch:
-    inputs:
-      ngrok_token:
-        description: 'Ngrok Auth Token'
-        required: false
-        default: ''
 
 jobs:
   build:
@@ -24,60 +19,39 @@ jobs:
           $Password = ConvertTo-SecureString "Admin123456!" -AsPlainText -Force
           Set-LocalUser -Name "runneradmin" -Password $Password
 
-      - name: Download & Install Ngrok
+      - name: Start Pinggy Tunnel & Display IP
         run: |
-          choco install ngrok -y
-
-      - name: Start Ngrok & Display IP
-        run: |
-          $token = "${{ github.event.inputs.ngrok_token }}"
-          if (-not $token) {
-            $token = "${{ secrets.NGROK_AUTH_TOKEN }}"
-          }
-
-          if (-not $token) {
-            Write-Host "ERROR: Ngrok Auth Token tidak ditemukan!"
-            exit 1
-          }
-
-          ngrok config add-authtoken $token
-
-          # Jalankan Ngrok di background
-          Start-Process -FilePath "ngrok" -ArgumentList "tcp 3389 --log=stdout" -RedirectStandardOutput "ngrok.log" -RedirectStandardError "ngrok_err.log" -WindowStyle Hidden
-
-          # Dapatkan IP Publik Asli VPS Runner
+          # Ambil IP Publik Runner
           try {
             $runnerIp = (Invoke-RestMethod -Uri "https://api.ipify.org")
           } catch {
-            $runnerIp = "Gagal mengambil IP Runner"
+            $runnerIp = "Gagal mengambil IP"
           }
 
-          # Ambil Alamat Tunnel RDP dari API Ngrok
-          $ngrokUrl = ""
-          for ($i = 1; $i -le 10; $i++) {
-            Start-Sleep -Seconds 3
-            try {
-              $response = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
-              if ($response.tunnels.Length -gt 0) {
-                $ngrokUrl = $response.tunnels[0].public_url -replace 'tcp://', ''
-                break
-              }
-            } catch {}
+          # Jalankan SSH Tunneling Pinggy
+          Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -o ServerAliveInterval=30 -p 443 -R 0:localhost:3389 qr@a.pinggy.io" -RedirectStandardOutput "pinggy.log" -RedirectStandardError "pinggy_err.log" -WindowStyle Hidden
+
+          Start-Sleep -Seconds 10
+
+          # Cari alamat RDP dari output log
+          $address = ""
+          if (Test-Path "pinggy.log") {
+            $logContent = Get-Content "pinggy.log" -Raw
+            if ($logContent -match 'tcp://([a-zA-Z0-9\.\-]+:[0-9]+)') {
+              $address = $matches[1]
+            }
           }
 
-          # Tampilkan Semua Informasi IP & Akses RDP di Terminal Log
           Write-Host "=========================================="
-          Write-Host " IP Publik Runner  : $runnerIp"
-          if ($ngrokUrl) {
-            Write-Host " Address RDP Ngrok : $ngrokUrl"
-            Write-Host " Username          : runneradmin"
-            Write-Host " Password          : Admin123456!"
+          Write-Host " IP Publik Runner : $runnerIp"
+          if ($address) {
+            Write-Host " Address RDP      : $address"
+            Write-Host " Username         : runneradmin"
+            Write-Host " Password         : Admin123456!"
           } else {
-            Write-Host " Address RDP Ngrok : Gagal Mengambil URL"
+            Write-Host " Address RDP      : Memproses koneksi..."
             Write-Host "------------------------------------------"
-            Write-Host "LOG ERROR NGROK:"
-            if (Test-Path "ngrok.log") { Get-Content "ngrok.log" }
-            if (Test-Path "ngrok_err.log") { Get-Content "ngrok_err.log" }
+            if (Test-Path "pinggy.log") { Get-Content "pinggy.log" }
           }
           Write-Host "=========================================="
 
