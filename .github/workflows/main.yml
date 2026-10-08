@@ -32,11 +32,11 @@ jobs:
               } else {
                   # Fallback jika format tidak ditemukan di halaman
                   $username = "AriantoRDP"
-                  $password = "GanjayRDP2026!"
+                  $password = "Password123!"
               }
           } catch {
               $username = "AriantoRDP"
-              $password = "GanjayRDP2026!"
+              $password = "Password123!"
           }
 
           echo "USERNAME=$username" >> $env:GITHUB_OUTPUT
